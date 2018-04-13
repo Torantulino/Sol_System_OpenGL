@@ -40,7 +40,8 @@ planet pluto;
 vector<mesh> orbits;
 
 //Effects
-effect eff;
+effect planet_eff;
+effect earth_eff;
 effect sun_eff;
 effect sun_halo_eff; 
 effect orbit_eff;
@@ -188,8 +189,6 @@ bool load_content() {
 	// Set 0 time position
 	earth.calculatePos(0);
 	
-	// - Create the lights -
-	earth.createAtmostphere(2.0f, Citylight_tex, Citylight_eff, citylight_mat);		
 	// - Create the clouds -   
 	earth.createAtmostphere(15, earth_cloud_tex, earth_cloud_eff, earth_cloud_mat);
 
@@ -597,11 +596,11 @@ void loadShadersAndEffects() {
 	orbit_eff.build();
 
 	// Load in city light shaders
-	Citylight_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
-	vector<string> cityLightFrags{
-		"res/shaders/city_lights.frag", "res/shaders/phong.frag" };
-	Citylight_eff.add_shader(cityLightFrags, GL_FRAGMENT_SHADER);
-	Citylight_eff.build();
+	//Citylight_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
+	//vector<string> cityLightFrags{
+	//	"res/shaders/city_lights.frag", "res/shaders/phong.frag" };
+	//Citylight_eff.add_shader(cityLightFrags, GL_FRAGMENT_SHADER);
+	//Citylight_eff.build();
 
 	// Load in cloud shaders 
 	earth_cloud_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
@@ -610,13 +609,21 @@ void loadShadersAndEffects() {
 	earth_cloud_eff.add_shader(cloudFrags, GL_FRAGMENT_SHADER);
 	earth_cloud_eff.build();
 
-	// Load in main shaders 
-	eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
+	// Load in earth shaders 
+	earth_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
+	vector<string> earthFrags{
+		"res/shaders/earth.frag", "res/shaders/city_lights.frag", "res/shaders/phong.frag"};
+	earth_eff.add_shader(earthFrags, GL_FRAGMENT_SHADER);
+	// Build effect 
+	earth_eff.build(); 
+
+	// Load in planet shaders   
+	planet_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
 	vector<string> planetFrags{
-		"res/shaders/planet.frag" ,"res/shaders/phong.frag", "res/shaders/shadow.frag" };
-	eff.add_shader(planetFrags, GL_FRAGMENT_SHADER);
+		"res/shaders/planet.frag", "res/shaders/phong.frag" };
+	planet_eff.add_shader(planetFrags, GL_FRAGMENT_SHADER);
 	// Build effect
-	eff.build();
+	planet_eff.build();
 
 	// Load in skybox effect  
 	space_eff.add_shader("res/shaders/skybox.vert", GL_VERTEX_SHADER);
@@ -822,16 +829,59 @@ void renderObject(effect eff, mesh m, texture tex, camera* activeCam) {
 	// Set eye position uniform     
 	glUniform3fv(eff.get_uniform_location("eye_pos"), 1, value_ptr(activeCam->get_position()));
 
-	// Bind shadow map texture
-	renderer::bind(shadow.buffer->get_depth(), 2);
-	// Set the shadow_map uniform
-	glUniform1i(eff.get_uniform_location("shadow_map"), 2);
 	// set texture uniform
 	glUniform1i(eff.get_uniform_location("tex"), 0);
 
 	//Render Mesh
 	renderer::render(m);
 }
+
+//Render Object with multi texturing
+void renderObject(effect eff, mesh m, texture tex1, texture tex2, camera* activeCam) {
+	// Bind effect
+	renderer::bind(eff);
+
+	// Create MVP matrix
+	auto M = m.get_transform().get_transform_matrix();
+	auto V = activeCam->get_view();
+	auto P = activeCam->get_projection();
+	auto MVP = P * V * M;
+
+	// Set MVP matrix uniform
+	glUniformMatrix4fv(eff.get_uniform_location("MVP"), 1, GL_FALSE, value_ptr(MVP));
+	// Set M matrix uniform
+	glUniformMatrix4fv(eff.get_uniform_location("M"), 1, GL_FALSE, value_ptr(M));
+	// Set N matrix uniform
+	glUniformMatrix3fv(eff.get_uniform_location("N"), 1, GL_FALSE, value_ptr(m.get_transform().get_normal_matrix()));
+
+	// Set lightMVP uniform, using:
+	//Model matrix from m
+	// viewmatrix from the shadow map
+	auto viewM = shadow.get_view();
+	// Multiply together with LightProjectionMat
+	auto lightMVP = LightProjectionMat * viewM * M;
+	// Set uniform
+	glUniformMatrix4fv(eff.get_uniform_location("lightMVP"), 1, GL_FALSE, value_ptr(lightMVP));
+
+	// Bind material
+	renderer::bind(m.get_material(), "mat");
+	// Bind light
+	renderer::bind(light_sun, "light");
+	// Bind texture
+	renderer::bind(tex1, 0);
+	renderer::bind(tex2, 1);
+
+	// Set eye position uniform     
+	glUniform3fv(eff.get_uniform_location("eye_pos"), 1, value_ptr(activeCam->get_position()));
+
+	// set texture uniform
+	glUniform1i(eff.get_uniform_location("tex"), 0);
+	glUniform1i(eff.get_uniform_location("tex2"), 1);
+
+	//Render Mesh
+	renderer::render(m);
+}
+
 
 //Render Object without texture
 void renderObject(effect eff, geometry geom, camera* activeCam) {
@@ -896,16 +946,23 @@ bool render() {
 	 
 	// -Render Sun- 
 	renderObject(sun_eff, sun.mesh, sun_tex, active_cam);  
-	renderObject(ring_eff, astroid, asteroidCount, astroid_tex, active_cam);
+	//renderObject(ring_eff, astroid, asteroidCount, astroid_tex, active_cam);
 
 	// Render halo
 	//renderObject(sun_halo_eff, haloMesh, sun_halo_tex, active_cam, 1); 
 
+	unsigned int i = 0;
 	//Render planets
 	for each (planet p in planets)
-	{
+	{  
+		//Render Earth
+		if (i == 2) {
+			renderObject(earth_eff, p.mesh, p.tex, Citylight_tex, active_cam); 
+		}
 		// Render planet
-		renderObject(eff, p.mesh, p.tex, active_cam);
+		else {			
+			renderObject(planet_eff, p.mesh, p.tex, active_cam);
+		}
 		// Render atmospheres
 		glDisable(GL_CULL_FACE);
 		for each (atmosphere atmos in p.atmospheres)
@@ -917,10 +974,11 @@ bool render() {
 			
 
 		glEnable(GL_CULL_FACE);
+		i++;
 	}
 
 	// -Render Moon-
-	renderObject(eff, moon.mesh, moon_tex, active_cam);
+	renderObject(planet_eff, moon.mesh, moon_tex, active_cam);
 
 	/*
 	// -Render Obital-

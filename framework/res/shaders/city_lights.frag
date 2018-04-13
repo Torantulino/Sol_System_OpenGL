@@ -1,5 +1,3 @@
-#version 440
-
 // Point light structure
 #ifndef POINT_LIGHT
 #define POINT_LIGHT
@@ -22,43 +20,21 @@ struct material {
   float shininess;
 };
 #endif
-
-// The Sun
-uniform point_light light;
-// Material of the object
-uniform material mat;
-// Position of the camera
-uniform vec3 eye_pos;
-// Texture
-uniform sampler2D tex;
-
-// Incoming position
-layout(location = 0) in vec3 position;
-// Incoming normal
-layout(location = 1) in vec3 normal;
-// Incoming texture coordinate
-layout(location = 2) in vec2 tex_coord;
-
-// Outgoing colour
-layout(location = 0) out vec4 colour;
-
 vec4 calculatePoint(in point_light point, in vec3 position, in vec3 normal, in material mat, in vec3 view_dir, in vec4 tex_colour);
 
-
-void main(){ 
-  // View Direction
-  vec3 view_dir = normalize(eye_pos - position); 
-  // Sample texture
-  vec4 tex_colour = texture(tex, tex_coord);
+vec4 calculateCityLights(in vec3 view_dir, in vec4 tex_colour, in material mat, in point_light light, in vec3 position, in vec3 normal){ 
     
   // Calculate point
   vec4 litLights = calculatePoint(light, position, normal, mat, view_dir, tex_colour);
   
-  colour = tex_colour;
+  // Set texture colour
+  vec4 colour = tex_colour;
   // Set black to Transparent
   colour.a = tex_colour.x;
   litLights.a = tex_colour.x;
 
   // Ensure lights only show on dark side of earth
   colour.a -= litLights.x;
+  
+  return colour;
 }
