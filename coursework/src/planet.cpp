@@ -63,6 +63,10 @@ void planet::calculatePos(float t) {
 
 	curPos = glm::vec3(x, y, z);
 	mesh.get_transform().position = curPos;
+
+	if (hasRing) {
+		ring.get_transform().position = curPos;
+	}
 }
 
 // Calculate and update the position of this moon at the specified time in hours.
@@ -88,6 +92,12 @@ void planet::calculateRotation(float t) {
 	mesh.get_transform().orientation = curOri;
 }
 
+void planet::setRing(graphics_framework::texture tex) {
+	float sRingRad = mesh.get_transform().scale.x;
+	ring = graphics_framework::mesh(graphics_framework::geometry_builder::create_cylinder(10, 10, glm::vec3(sRingRad, 0.0f, sRingRad)));
+	ring_tex = tex;
+	hasRing = true;
+}
 
 // Create an atmostphere for this celestial body with a specified thickness and add it to a list.
 void planet::createAtmostphere(float thickness, graphics_framework::texture tex, graphics_framework::effect eff, graphics_framework::material mat) {

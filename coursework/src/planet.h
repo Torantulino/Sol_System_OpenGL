@@ -17,18 +17,24 @@ public:
 	void calculatePos(float t);													// Calculate and update the position of this planet at the specified time in hours.
 	void calculatePos(float t, planet parent);									// Calculate and update the position of this moon at the specified time in hours.
 	void updateAtmostpheres();													// Updates the position and rotation of the atmosphere's relating to this planet.
-
+	void setRing(graphics_framework::texture tex);
+		
 																				// Fields
-	std::vector<atmosphere> atmospheres;											// The atmosphere's or other secondary meshes associated with this body. TODO: SPECIFY SORTING ORDER
+	std::vector<atmosphere> atmospheres;										// The atmosphere's or other secondary meshes associated with this body. TODO: SPECIFY SORTING ORDER
 	double size;																// The diametric size of the celestial body as a ratio to Earth.
 	double distance;															// The position of the planet in the evenly spaced distance from sun, or proportional ditance to that from it's parent.
 	double orbitalPeriod;														// The time taken to complete a full orbit of it's parent.
 	double rotationalPeriod;													// The time taken to complete a full rotation.
+	bool hasRing = false;														// Whether or not the planet has a ring.
 	float actDist;																// The actual distance of the planet from the sun center.
 	glm::vec3 curPos;															// The current position of the celestial body.
 	glm::vec3 curOri;															// The current orientation of the celestial body.
 	graphics_framework::mesh mesh;												// The associated mesh for the celestial body.
+	graphics_framework::mesh ring;
+	graphics_framework::texture ring_tex;
 	graphics_framework::texture tex;
+	glm::mat4* ringModelMatrices;
+	int ringCount;
 
 
 private:
