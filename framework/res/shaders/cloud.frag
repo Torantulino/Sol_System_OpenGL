@@ -52,7 +52,6 @@ void main(){
   // Calculate Point
   colour += calculatePoint(light, position, normal, mat, view_dir, tex_colour);
     
-  colour.a = 1.0f;
   // set black to transparent
   colour.a = tex_colour.x;
 }

@@ -28,6 +28,7 @@ void planet::createPlanet(double pSize, double pDistance, double orbP, double ro
 // Calculate the X position of the celestial body in relation to it's parent at a given time in hours.
 float planet::CalculateXPos(float t, bool isMoon) {
 	float x;
+	// Calculate the distance from the surface of the sun, or center of parent planet.
 	actDist = distance * AU;
 	// Add sun radius displacement if not a moon.
 	if(!isMoon)
@@ -41,6 +42,7 @@ float planet::CalculateXPos(float t, bool isMoon) {
 // Calculate the Y position of the celestial body in relation to it's parent at a given time in hours.
 float planet::CalculateZPos(float t, bool isMoon) {
 	float z;
+	// Calculate the distance from the surface of the sun, or center of parent planet.
 	actDist = distance * AU;
 	// Add sun radius displacement if not a moon.
 	if (!isMoon)
@@ -93,8 +95,8 @@ void planet::calculateRotation(float t) {
 }
 
 void planet::setRing(graphics_framework::texture tex) {
-	float sRingRad = mesh.get_transform().scale.x;
-	ring = graphics_framework::mesh(graphics_framework::geometry_builder::create_cylinder(10, 10, glm::vec3(sRingRad, 0.0f, sRingRad)));
+	float sRingRad = 2*(mesh.get_transform().scale.x);
+	ring = graphics_framework::mesh(graphics_framework::geometry_builder::create_disk(50, glm::vec2(sRingRad)));
 	ring_tex = tex;
 	hasRing = true;
 }

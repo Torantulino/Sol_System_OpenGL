@@ -9,15 +9,15 @@ class planet
 public:
 	// Methods
 	void createPlanet(double size, double distance, double orbP, double rotP,
-			graphics_framework::material mat, graphics_framework::texture tex);	// Create a new celestial body, specifiying orbital elements as a ratio to that of earths.
+		graphics_framework::material mat, graphics_framework::texture tex);		// Create a new celestial body, specifiying orbital elements as a ratio to that of earths.
 	void createAtmostphere(float thickness, graphics_framework::texture tex,
-			graphics_framework::effect eff, graphics_framework::material mat);	// Create an atmostphere for this celestial body with a specified thickness and add it to a list.
+		graphics_framework::effect eff, graphics_framework::material mat);		// Create an atmostphere for this celestial body with a specified thickness and add it to a list.
 	void createOrbit();															// Create a ring showing the path of the orbit of this celestial body
 	void calculateRotation(float t);											// Calculate and update the rotation for this celestial body at the specified time in hours.
 	void calculatePos(float t);													// Calculate and update the position of this planet at the specified time in hours.
 	void calculatePos(float t, planet parent);									// Calculate and update the position of this moon at the specified time in hours.
 	void updateAtmostpheres();													// Updates the position and rotation of the atmosphere's relating to this planet.
-	void setRing(graphics_framework::texture tex);
+	void setRing(graphics_framework::texture tex);								// Creates ring for planet and sets flags - Future versions.
 		
 																				// Fields
 	std::vector<atmosphere> atmospheres;										// The atmosphere's or other secondary meshes associated with this body. TODO: SPECIFY SORTING ORDER
@@ -30,11 +30,9 @@ public:
 	glm::vec3 curPos;															// The current position of the celestial body.
 	glm::vec3 curOri;															// The current orientation of the celestial body.
 	graphics_framework::mesh mesh;												// The associated mesh for the celestial body.
-	graphics_framework::mesh ring;
-	graphics_framework::texture ring_tex;
-	graphics_framework::texture tex;
-	glm::mat4* ringModelMatrices;
-	int ringCount;
+	graphics_framework::mesh ring;												// The mesh for the ring of the planet - Future versions
+	graphics_framework::texture ring_tex;										// The texture for the ring of the planet
+	graphics_framework::texture tex;											// The texture for the planet
 
 
 private:
@@ -46,7 +44,7 @@ private:
 	float sunR = 70000;															// The radius of the sun.
 
 																				// Methods
-	float CalculateXPos(float t, bool isMoon);												// Calculate the X position of the celestial body in relation to it's parent at a given time in hours.
-	float CalculateZPos(float t, bool isMoon);												// Calculate the Z position of the celestial body in relation to it's parent at a given time in hours.
+	float CalculateXPos(float t, bool isMoon);									// Calculate the X position of the celestial body in relation to it's parent at a given time in hours.
+	float CalculateZPos(float t, bool isMoon);									// Calculate the Z position of the celestial body in relation to it's parent at a given time in hours.
 };
 

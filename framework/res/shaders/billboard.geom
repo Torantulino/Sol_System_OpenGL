@@ -27,25 +27,26 @@ void main() {
   vec3 haloDirection = normalize(eye_pos - vec3(position));
   position += vec4(haloDirection * 20000, 1);
 
-  // Vertex 1 is bottom left
+
+  // Vertex 1, bottom left
   vec2 va = position.xy + vec2(-0.5, -0.5) * point_size;
   gl_Position = P * vec4(va, position.zw);
   tex_coord = vec2(0.0, 0.0);
   EmitVertex();
 
-  // Vertex 2 is bottom right
+  // Vertex 2, bottom right
   vec2 vb = position.xy + vec2(0.5, -0.5) * point_size;
   gl_Position = P * vec4(vb, position.zw);
   tex_coord = vec2(1.0, 0.0);
   EmitVertex();
 
-  // Vertex 3 is top left
+  // Vertex 3, top left
   vec2 vc = position.xy + vec2(-0.5, 0.5) * point_size;
   gl_Position = P * vec4(vc, position.zw);
   tex_coord = vec2(0.0, 1.0);
   EmitVertex();  
 
-  // Vertex 4 it top right
+  // Vertex 4, top right
   vec2 vd = position.xy + vec2(0.5, 0.5) * point_size;
   gl_Position = P * vec4(vd, position.zw);
   tex_coord = vec2(1.0, 1.0);

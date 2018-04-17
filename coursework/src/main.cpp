@@ -46,14 +46,10 @@ effect sun_eff;
 effect sun_halo_eff; 
 effect orbit_eff;
 effect Citylight_eff; 
-effect earth_cloud_eff;
+effect cloud_eff;
 effect space_eff;
 effect skybox_overlay_eff;
-effect shadow_eff;
-effect flare_eff;
-effect ring_eff;
-
-shadow_map shadow;
+effect asteroid_eff;
 
 //Cameras
 target_camera target_cam;
@@ -82,24 +78,21 @@ texture sun_halo_tex;
 texture star_tex;
 texture grid_tex;
 texture constellation_tex;
-texture cockpit_tex;
 texture white_tex;
 texture astroid_tex;
+texture saturn_ring_tex;
 
 //Meshes
 mesh skybox;
 mesh stargrid;
 mesh constellations;
-map<string, mesh> meshes;
 mesh haloMesh;
 geometry astroid;
 
 //Global Variables
 vec3 velocity = vec3(0.0f);
-mat4 LightProjectionMat;
 float angularV = 0.0f;
 float angularA = 0.1f;
-float theta;
 float timeM = 1;
 float curTime;
 float zoomSpeed = 50;
@@ -109,6 +102,7 @@ double cursor_x = 0.0;
 double cursor_y = 0.0;
 double mSensitivity = 4.0;
 double accel = 1;
+float maxSpeed = 10;
 bool freecam = false;
 bool showGrid = false;
 bool showConst = false;
@@ -119,14 +113,15 @@ bool newDownPress;
 bool newCommaPress;
 bool newFPress;
 bool newSlashPress;
+bool newEqualsPress;
+bool newMinusPress;
 int targetedPlanet = 0;
 int asteroidCount;
 
 
 void loadTextures();
 void loadShadersAndEffects();
-void createAsteroidRing( int ammount, float pRad, float width, float thickness);
-
+void createAsteroidRing(geometry geom, vec3 center, int ammount, float pRad, float width, float thickness, int minSize, int maxSize);
 
 bool load_content() { 
 
@@ -139,16 +134,9 @@ bool load_content() {
 	// Load Shaders
 	loadShadersAndEffects();
 	
-	//---------TODO: TIDY UP------------------
-
 	//Assign Material 
-	//#### IF ALL MATERIAL SAME, ONLY ASSIGN VARIABLE ONCE, IF MOST BUT NOT ALL SAME, BUCKET 'MOST'
-	//#### (SET MAT -> RENDER 'MOST' -> SET INDIVIDUAL MATERIALS USING partRenderObject())
 	material mat;
-	material glassMat;
 	material earth_cloud_mat;
-	material gridMat;
-	material citylight_mat;
 
 	//Set material
 	mat.set_diffuse(vec4(1.0f));
@@ -156,33 +144,11 @@ bool load_content() {
 	mat.set_shininess(200.0f);
 	mat.set_specular(vec4(1.0f));
 
-	// #### TODO: EXPLORE POSSIBILITIES OF USING MATIERAL FOR lowering ALPHA (RATHER THAN SHADER). ####
-	gridMat.set_diffuse(vec4(1.0f));
-
-	citylight_mat.set_diffuse(vec4(1.0f));
-	citylight_mat.set_emissive(vec4(vec3(0.0f), 1.0f));
-	citylight_mat.set_shininess(0.0f);
-	citylight_mat.set_specular(vec4(0.0f));
-
-	//Earth Haze
+	//Earth cloud
 	earth_cloud_mat.set_diffuse(vec4(0.7f, 0.7f, 0.9f, 1.0f));
 	earth_cloud_mat.set_emissive(vec4(vec3(0.0f), 1.0f));
 	earth_cloud_mat.set_shininess(500.0f);
 	earth_cloud_mat.set_specular(vec4(1.0f));
-
-	//Station Glass
-	glassMat.set_diffuse(vec4(0.74f, 0.776f, 0.818f, 0.2f));
-	glassMat.set_emissive(vec4(0.0f, 0.0f, 0.0f, 0.2f));
-	glassMat.set_shininess(25.0f);
-	glassMat.set_specular(vec4(1.0f));
-
-	//-----------------------------
-
-	// Create new shadow map
-	shadow = shadow_map(renderer::get_screen_width(), renderer::get_screen_height());
-
-	// Set light projection matrix
-	LightProjectionMat = infinitePerspective<float>(90.f, renderer::get_screen_aspect(), 0.1f);
 
 	// - Create the earth -
 	earth.createPlanet(1, 3, 1, 1, mat, earth_tex);
@@ -190,7 +156,7 @@ bool load_content() {
 	earth.calculatePos(0);
 	
 	// - Create the clouds -   
-	earth.createAtmostphere(15, earth_cloud_tex, earth_cloud_eff, earth_cloud_mat);
+	earth.createAtmostphere(15, earth_cloud_tex, cloud_eff, earth_cloud_mat);
 
 	// - Create the Sun -
 	sun.createPlanet(109, 0, 0, 24.47, mat, sun_tex);
@@ -210,7 +176,7 @@ bool load_content() {
 	// - Create Venus -
 	venus.createPlanet(0.949, 2, 0.615, -244, mat, venus_tex);
 	// create atmosphere
-	venus.createAtmostphere(15, venus_atmos_tex, earth_cloud_eff, mat);
+	venus.createAtmostphere(15, venus_atmos_tex, cloud_eff, mat);
 
 	// - Create Mars - 
 	mars.createPlanet(0.532, 4, 1.88, 1.03, mat, mars_tex);
@@ -220,9 +186,9 @@ bool load_content() {
 	
 	// - Create Saturn -
 	saturn.createPlanet(9.45, 6, 29.4, 0.445, mat, saturn_tex);
-	// Create Ring
+	// Create Ring - For future versions.
+	saturn.setRing(saturn_ring_tex);
 	saturn.hasRing = true;
-
 
 	// - Create Uranus -
 	uranus.createPlanet(4.01, 7, 83.7, -0.720, mat, uranus_tex);
@@ -240,55 +206,33 @@ bool load_content() {
 	// Create Astroid Belt
 	astroid = geometry("res/models/rock.obj");
 	asteroidCount = 10000;
-	createAsteroidRing(asteroidCount, 100000, 10000, 0.01f);
+	createAsteroidRing(astroid, vec3(0.0), asteroidCount, 190000, 10000, 0.01f, 100, 400);
 
-
-	// Add Planets, Stars and Moons to Collection
+	// Add Planets to Collection
 	planets = { mercury, venus, earth, mars, jupiter, saturn, uranus, neptune, pluto };
 
-	// - Create the Space Staion -
-    // Load in parts
-	//wheel 
-	meshes["wheel"] = mesh(geometry("res/models/orbital/wheel.obj"));   
-	meshes["wheel"].get_transform().scale = vec3(1.0f);
-	//pod
-	meshes["pod"] = mesh(geometry("res/models/orbital/pod.obj"));
-	//window
-	meshes["window"] = mesh(geometry("res/models/orbital/window.obj"));
-	//spokes
-	meshes["spoke1"] = mesh(geometry("res/models/orbital/spoke.obj"));
-	meshes["spoke2"] = mesh(geometry("res/models/orbital/spoke.obj"));
-	//meshes["spoke2"].get_geometry().get_array_object
-	meshes["spoke2"].get_transform().rotate(quat(-cos(0), vec3(0.0f, 0.0f, 1.0f)));
-	meshes["spoke3"] = mesh(geometry("res/models/orbital/spoke.obj"));
-	meshes["spoke3"].get_transform().rotate(quat((0), vec3(0.0f, 0.0f, 1.0f)));
-	meshes["spoke4"] = mesh(geometry("res/models/orbital/spoke.obj"));
-	meshes["spoke4"].get_transform().rotate(quat(cos(0), vec3(0.0f, 0.0f, 1.0f)));
-
+	//TODO: IN FUTURE VERSIONS, USE MULTITEXTURING
 	// - Create the stars (sky_sphere) - 
 	skybox = mesh(geometry_builder::create_sphere(50, 50));
 	skybox.get_transform().scale = vec3(450000.0f);
-	skybox.get_transform().rotate(quat(cos(0), vec3(1.0f, 0.0f, 0.0f)));
+	skybox.get_transform().orientation = vec3(-half_pi<float>(), 0.0f, 0.0f);
 
 	// - Create Star Gird -
 	stargrid = mesh(geometry_builder::create_sphere(50, 50));
 	stargrid.get_transform().scale = vec3(450000.0f);
-	stargrid.get_transform().rotate(quat(cos(0), vec3(1.0f, 0.0f, 0.0f)));
+	stargrid.get_transform().orientation = vec3(-half_pi<float>(), 0.0f, 0.0f);
 
 	// - Create Constalations -
 	constellations = mesh(geometry_builder::create_sphere(50, 50));
 	constellations.get_transform().scale = vec3(450000.0f);
-	constellations.get_transform().rotate(quat(cos(0), vec3(1.0f, 0.0f, 0.0f)));
+	constellations.get_transform().orientation = vec3(-half_pi<float>(), 0.0f, 0.0f);
 
 	//Set light
 	// Light colour white
 	light_sun.set_light_colour(vec4(vec3(1.0f), 1.0f));
-	light_sun.set_range(400000.0f);
-	light_sun.set_constant_attenuation(0);
-
-	//Shadow for directional light (doesn't move)
-	shadow.light_dir = vec3(0.0f, 0.0f, -1.0f);         
-	shadow.light_position = vec3(0.0f, 0.0f, 7000.0f);  
+	light_sun.set_quadratic_attenuation(0.0000000000390625f);
+	light_sun.set_constant_attenuation(0.0f);
+	light_sun.set_linear_attenuation(0.0f);
 
 	// Set camera properties
 	target_cam.set_position(vec3(0.0f, 0.0f, 2000.0f));
@@ -326,16 +270,16 @@ void updateFreeCam(float delta_time) {
 	// Multiply deltas by ratios - gets actual change in orientation
 	delta_x = delta_x * ratio_width;
 	delta_y = delta_y * ratio_height;
-
+	
 	// Rotate cameras by delta 
-	// delta_y - x-axis rotation
-	// delta_x - y-axis rotation
+	// delta_y = x-axis rotation
+	// delta_x = y-axis rotation
 	free_cam.rotate(-delta_x * mSensitivity, delta_y * mSensitivity);
 
 	// Update the camera
 	free_cam.update(delta_time);
 
-	// Update cursor pos
+	// Update cursor pos for next frame
 	glfwGetCursorPos(renderer::get_window(), &cursor_x, &cursor_y);
 }
 
@@ -370,19 +314,19 @@ bool update(float delta_time) {
 		//gear 1
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_1)) {
 			accel = 1;
+			maxSpeed = 10;
 		}
 		//gear 2
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_2)) {
 			accel = 10;
+			maxSpeed = 100;
 		}
 		//gear 3
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_3)) {
 			accel = 100;
+			maxSpeed = 1000;
 		}
-		//gear 4
-		if (glfwGetKey(renderer::get_window(), GLFW_KEY_4)) {
-			accel = 1000;
-		}
+		//Teleport
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_F1)) {
 			free_cam.set_position(planets[2].curPos);
 		}
@@ -410,19 +354,31 @@ bool update(float delta_time) {
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_LEFT_CONTROL)) {
 			velocity += -deltaV * free_cam.get_up();
 		}
+		//Stop
+		if (glfwGetKey(renderer::get_window(), GLFW_KEY_SPACE)) {
+			velocity = vec3(0.0f);
+		}
+
+		/*
+		// Roll # in progress for future versions #
 		//rotate left
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_Q)) {
 			angularV += (angularA * delta_time);
 		}
-		// Roll # in progress #
 		//free_cam.roll(angularV);
+		*/
+
+		// If velocity magnitude is over max speed
+		if (length(velocity) > maxSpeed) {
+			velocity = normalize(velocity) * maxSpeed;
+		}
+		
 		free_cam.set_position(free_cam.get_position() + velocity);
 		updateFreeCam(delta_time);
 	}
 	// Target_cam Controls
 	else {
 		// Cycle Planets
-		//TODO: SET OFFSET SCALE WITH PLANET SIZE offset * size
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_UP)) {
 			if (newUpPress) {
 				//Target next planet
@@ -441,10 +397,10 @@ bool update(float delta_time) {
 		else {
 			newUpPress = true;
 		}
-		// Move closer
+		// Move closer 
 		if (glfwGetKey(renderer::get_window(), GLFW_KEY_W)) {
 			// Do not allow zooming to point of near clippling plane with planet surface (Atmosphere is allowed)
-			if (target_cam_offset > planets[targetedPlanet].size * earthRad + 10.5)
+			if (target_cam_offset > planets[targetedPlanet].size * earthRad + 11)
 				target_cam_offset -= delta_time * zoomSpeed;
 		}
 		// Move Further
@@ -483,19 +439,26 @@ bool update(float delta_time) {
 	else {
 		newSlashPress = true;
 	}
-	// Change Clock speed
+	// Change Clock speed up
 	if (glfwGetKey(renderer::get_window(), GLFW_KEY_EQUAL)) {
-		timeM = 500;
+		if (newEqualsPress && timeM < 100) {
+			timeM *= 10.0f;
+			newEqualsPress = false;
+		}
 	}
+	else {
+		newEqualsPress = true;
+	}
+	// Change Clock speed down
 	if (glfwGetKey(renderer::get_window(), GLFW_KEY_MINUS)) {
-		timeM = 1;
+		if (newMinusPress && timeM > 0.01) {
+				timeM /= 10.0f;
+				newMinusPress = false;
+		}
 	}
-
-
-	// Update Orbital position
-	//meshes["wheel"].get_transform().position = cam.get_position() - (400.0f * vec3(normalize(cam.get_position() - cam.get_target())));
-	//meshes["wheel"].get_transform().rotate(vec3(0.0f, normalize(cam.get_position() - cam.get_target()).y, 0.0f));
-
+	else {
+		newMinusPress = true;
+	}
 
 	// - Update Positions and rotations of Celestial Objects -
 	// update time
@@ -519,9 +482,15 @@ bool update(float delta_time) {
 	// Update target cam (This needs to happen after planet positions are updated)
 	target_cam.set_target(planets[targetedPlanet].curPos);
 	// Get the normal vector from planet to cam
-	vec3 offsetDircet = normalize(target_cam.get_position() - planets[targetedPlanet].curPos);
+	vec3 offsetDircet = normalize(target_cam.get_position() - planets[targetedPlanet].curPos); //Calculate this before setting target to prevent panning when adding user control.	
 	target_cam.set_position(planets[targetedPlanet].curPos + offsetDircet * target_cam_offset);
 	target_cam.update(delta_time);
+
+	//Move skybox so player can't catch up to it
+	vec3 pos = active_cam->get_position();
+	skybox.get_transform().position = pos;
+	stargrid.get_transform().position = pos;
+	constellations.get_transform().position = pos;
 
 	return true;
 }
@@ -564,8 +533,6 @@ void loadTextures() {
 	grid_tex = texture("res/textures/stargrid.jpg");
 	// Load constellation texture
 	constellation_tex = texture("res/textures/constellation_chart.jpg");
-	// Load cockpit texture
-	cockpit_tex = texture("res/textures/cockpit.png");
 	// Load white tex
 	white_tex = texture("res/textures/white_texel.png");
 	// Load atsroid tex
@@ -579,35 +546,23 @@ void loadShadersAndEffects() {
 	sun_eff.add_shader("res/shaders/skybox.frag", GL_FRAGMENT_SHADER);
 	sun_eff.build();
 
-	// Load in flare shaders  TODO: RESEARCH LENSEFLARES THROUGH SHADERTOY TO BETTER UNDERSTAND HOW THEY WORK
-	flare_eff.add_shader("res/shaders/flare.vert", GL_VERTEX_SHADER);
-	flare_eff.add_shader("res/shaders/flare.frag", GL_FRAGMENT_SHADER);
-	flare_eff.build();
-
 	// Load in sun halo shader
 	sun_halo_eff.add_shader("res/shaders/shader.vert", GL_VERTEX_SHADER);
 	sun_halo_eff.add_shader("res/shaders/billboard.geom", GL_GEOMETRY_SHADER);
 	sun_halo_eff.add_shader("res/shaders/shader.frag", GL_FRAGMENT_SHADER);
 	sun_halo_eff.build();
 
-	// Load in orbit shader
+	// Load in orbit path shader
 	orbit_eff.add_shader("res/shaders/shader.vert", GL_VERTEX_SHADER);
 	orbit_eff.add_shader("res/shaders/orbit.frag", GL_FRAGMENT_SHADER);
 	orbit_eff.build();
 
-	// Load in city light shaders
-	//Citylight_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
-	//vector<string> cityLightFrags{
-	//	"res/shaders/city_lights.frag", "res/shaders/phong.frag" };
-	//Citylight_eff.add_shader(cityLightFrags, GL_FRAGMENT_SHADER);
-	//Citylight_eff.build();
-
 	// Load in cloud shaders 
-	earth_cloud_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
+	cloud_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
 	vector<string> cloudFrags{
 		"res/shaders/cloud.frag", "res/shaders/phong.frag" };
-	earth_cloud_eff.add_shader(cloudFrags, GL_FRAGMENT_SHADER);
-	earth_cloud_eff.build();
+	cloud_eff.add_shader(cloudFrags, GL_FRAGMENT_SHADER);
+	cloud_eff.build();
 
 	// Load in earth shaders 
 	earth_eff.add_shader("res/shaders/phong.vert", GL_VERTEX_SHADER);
@@ -637,35 +592,16 @@ void loadShadersAndEffects() {
 	// Build effect
 	skybox_overlay_eff.build();
 
-	// Load in Shadow effect
-	shadow_eff.add_shader("res/shaders/plainPhong.vert", GL_VERTEX_SHADER);
-	shadow_eff.add_shader("res/shaders/plainPhong.frag", GL_FRAGMENT_SHADER);
+	// Load in Asteroid Effect
+	asteroid_eff.add_shader("res/shaders/astroid.vert", GL_VERTEX_SHADER);
+	asteroid_eff.add_shader("res/shaders/astroid.frag", GL_FRAGMENT_SHADER);
 	// Build effect
-	shadow_eff.build();
-
-	// Load in Ring Effect
-	ring_eff.add_shader("res/shaders/astroid.vert", GL_VERTEX_SHADER);
-	ring_eff.add_shader("res/shaders/astroid.frag", GL_FRAGMENT_SHADER);
-	// Build effect
-	ring_eff.build();
+	asteroid_eff.build();
 }
 
-// Create orbit path
-void createOrbitPath(geometry geom, int quality) {
-	// Set geometry type to line loop
-	geom.set_type(GL_LINE_LOOP);
-	
-	// Positions
-	vector<vec3> positions;
 
-	for (int i = 0; i<quality; ++i)
-		positions.push_back(vec3(cos(2 * i*pi<float>() / quality), 0.0f, sin(2 * i*pi<float>() / quality)));
-
-	// Add to the geometry
-	geom.add_buffer(positions, BUFFER_INDEXES::POSITION_BUFFER);
-}
-
-void createAsteroidRing(int ammount, float pRad, float width, float thickness) {
+// Generate transformation matrixes for an asteroid ring using the supplied geometry
+void createAsteroidRing(geometry geom, vec3 center, int ammount, float pRad, float width, float thickness, int minSize, int maxSize) {
 	
 	mat4* modelMatrices;
 	modelMatrices = new mat4[ammount];
@@ -678,21 +614,21 @@ void createAsteroidRing(int ammount, float pRad, float width, float thickness) {
 	// Generate Asteroids!
 	for (int i = 0; i < ammount; i++) {
 		mat4 M(1.0f);
-		// Draw in uniform circle
+		// Increment around the circle for each astroid
 		float direction = float(i) / ammount * 360.0f;
 		// Calculate random x
 		float offsetX = (rand() % int(width - -width + 1));
-		x = sin(radians(direction)) * pRad + offsetX;
+		x = sin(radians(direction)) * pRad + offsetX + center.x;
 		// Calculate random y
 		float offsetY = (rand() % int(width - -width + 1));
-		y = thickness * offsetY;
+		y = thickness * offsetY + center.y;
 		// Calculate random z
 		float offsetZ = (rand() % int(width - -width + 1));
-		z = cos(radians(direction)) * pRad + offsetZ;
+		z = cos(radians(direction)) * pRad + offsetZ + center.z;
 		M = translate(M, vec3(x, y, z));
 
 		// Scale randomly
-		M = scale(M, vec3(rand() % 400 - 200));
+		M = scale(M, vec3(rand() % maxSize - minSize + 1));
 		
 		// Rotate Randomly reusing x,z,y randoms for random vector
 		vec3 rotV = normalize(vec3(offsetX, offsetY, offsetZ));
@@ -714,7 +650,7 @@ void createAsteroidRing(int ammount, float pRad, float width, float thickness) {
 	glBufferData(GL_ARRAY_BUFFER, ammount * mat4Size, &modelMatrices[0], GL_STATIC_DRAW);
 
 	// Bind vertex array
-	glBindVertexArray(astroid.get_array_object());
+	glBindVertexArray(geom.get_array_object());
 	
 	// Assign vertex atributes
 	glEnableVertexAttribArray(3);
@@ -734,6 +670,7 @@ void createAsteroidRing(int ammount, float pRad, float width, float thickness) {
 
 	glBindVertexArray(0);
 }
+
 
 //Render Instanced Object
 void renderObject(effect eff, geometry geom, int count, texture tex, camera* activeCam) {
@@ -760,7 +697,7 @@ void renderObject(effect eff, geometry geom, int count, texture tex, camera* act
 
 	// Draw
 	glBindVertexArray(geom.get_array_object());
-	glDrawElementsInstanced(GL_TRIANGLES, astroid.get_index_count(), GL_UNSIGNED_INT, 0, count);	
+	glDrawElementsInstanced(GL_TRIANGLES, geom.get_index_count(), GL_UNSIGNED_INT, 0, count);	
 	glBindVertexArray(0);
 }
 
@@ -783,7 +720,7 @@ void renderObject(effect eff, mesh geo, texture tex, camera * activeCam, int i) 
 		1, 
 		GL_FALSE,
 		value_ptr(P));
-	glUniform1f(eff.get_uniform_location("point_size"), 1400000.0f);   
+	glUniform1f(eff.get_uniform_location("point_size"), 700000.0f);   
 	renderer::bind(tex, 0);
 	// Set eye position uniform     
 	glUniform3fv(eff.get_uniform_location("eye_pos"), 1, value_ptr(activeCam->get_position()));
@@ -810,15 +747,6 @@ void renderObject(effect eff, mesh m, texture tex, camera* activeCam) {
 	// Set N matrix uniform
 	glUniformMatrix3fv(eff.get_uniform_location("N"), 1, GL_FALSE, value_ptr(m.get_transform().get_normal_matrix()));
 	  
-	// Set lightMVP uniform, using:
-	//Model matrix from m
-	// viewmatrix from the shadow map
-	auto viewM = shadow.get_view();
-	// Multiply together with LightProjectionMat
-	auto lightMVP = LightProjectionMat * viewM * M;
-	// Set uniform
-	glUniformMatrix4fv(eff.get_uniform_location("lightMVP"), 1, GL_FALSE, value_ptr(lightMVP));
-
 	// Bind material
 	renderer::bind(m.get_material(), "mat");
 	// Bind light
@@ -853,15 +781,6 @@ void renderObject(effect eff, mesh m, texture tex1, texture tex2, camera* active
 	glUniformMatrix4fv(eff.get_uniform_location("M"), 1, GL_FALSE, value_ptr(M));
 	// Set N matrix uniform
 	glUniformMatrix3fv(eff.get_uniform_location("N"), 1, GL_FALSE, value_ptr(m.get_transform().get_normal_matrix()));
-
-	// Set lightMVP uniform, using:
-	//Model matrix from m
-	// viewmatrix from the shadow map
-	auto viewM = shadow.get_view();
-	// Multiply together with LightProjectionMat
-	auto lightMVP = LightProjectionMat * viewM * M;
-	// Set uniform
-	glUniformMatrix4fv(eff.get_uniform_location("lightMVP"), 1, GL_FALSE, value_ptr(lightMVP));
 
 	// Bind material
 	renderer::bind(m.get_material(), "mat");
@@ -920,6 +839,7 @@ void renderOrbit(float orbR) {
 }
 
 bool render() { 
+
 	glDisable(GL_DEPTH_TEST);
 	glDepthMask(GL_FALSE);
 	glCullFace(GL_FRONT);
@@ -946,10 +866,13 @@ bool render() {
 	 
 	// -Render Sun- 
 	renderObject(sun_eff, sun.mesh, sun_tex, active_cam);  
-	//renderObject(ring_eff, astroid, asteroidCount, astroid_tex, active_cam);
+	
+	// Render halo - Code left in for observation if desired.
+	//renderObject(sun_halo_eff, haloMesh, sun_halo_tex, active_cam, 1);   
 
-	// Render halo
-	//renderObject(sun_halo_eff, haloMesh, sun_halo_tex, active_cam, 1); 
+
+	// - Render Asteroid Belt - 
+	renderObject(asteroid_eff, astroid, asteroidCount, astroid_tex, active_cam);
 
 	unsigned int i = 0;
 	//Render planets
@@ -969,34 +892,18 @@ bool render() {
 		{
 			renderObject(atmos.eff, atmos.mesh, atmos.tex, active_cam);
 		}
+		//Ring to be worked on in later versions
+		/*
 		// Render ring
-		//if (p.hasRing)
-			
-
+		if (p.hasRing)
+			renderObject(cloud_eff, p.ring, saturn_ring_tex, active_cam);
+		*/
 		glEnable(GL_CULL_FACE);
 		i++;
 	}
 
 	// -Render Moon-
 	renderObject(planet_eff, moon.mesh, moon_tex, active_cam);
-
-	/*
-	// -Render Obital-
-	//-Wheel-
-	renderObject(eff, meshes["wheel"], moon_tex, active_cam);
-	//-Pod-
-	renderObject(eff, meshes["pod"], meshes["wheel"], moon_tex, active_cam);
-	//-Window-
-	renderObject(eff, meshes["window"], meshes["wheel"], moon_tex, active_cam);
-	//-Spoke 1-
-	renderObject(eff, meshes["spoke1"], meshes["wheel"], moon_tex, active_cam);
-	//-Spoke 2-
-	renderObject(eff, meshes["spoke2"], meshes["wheel"], moon_tex, active_cam);
-	//-Spoke 3-
-	renderObject(eff, meshes["spoke3"], meshes["wheel"], moon_tex, active_cam);
-	//-Spoke 4-
-	renderObject(eff, meshes["spoke4"], meshes["wheel"], moon_tex, active_cam);
-	*/
 
 	// Render Orbits
 	if (showOrbit) {
@@ -1011,7 +918,7 @@ bool render() {
 
 void main() {
 	// Create application
-	app application("Spying Earth");
+	app application("Spying Earth", renderer::fullscreen);
 	// Set methods
 	application.set_load_content(load_content);
 	application.set_update(update);

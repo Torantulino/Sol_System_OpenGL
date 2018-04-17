@@ -23,7 +23,7 @@ vec4 calculatePoint(in point_light point, in vec3 position, in vec3 normal, in m
   // Get distance between point light and vertex
   float d = distance(point.position, position);
   // Calculate light colour
-  vec4 light_col = (1 / (point.constant + (point.linear * d) + (point.quadratic * (pow(d, 2))))) * point.light_colour;
+  vec4 light_col = (1 / (point.quadratic * (pow(d, 2)))) * point.light_colour;
   // Calculate light dir
   vec3 L = normalize(point.position - position);
   // Diffuse
